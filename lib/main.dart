@@ -59,7 +59,7 @@ class _MyHomePageState extends State<MyHomePage> {
         page = GeneratorPage();
         break;
       case 1:
-        page = Placeholder();
+        page = FavoritePage();
         break;
       default:
         throw UnimplementedError('no widget for $selectedIndex');
@@ -103,6 +103,33 @@ class _MyHomePageState extends State<MyHomePage> {
   }
 }
 
+class FavoritePage extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    var appState = context.watch<MyAppState>();
+    var favorites = appState.favorites;
+    final theme = Theme.of(context);
+
+    return ListView(
+      children: [
+        Padding(
+          padding: const EdgeInsets.all(8.0),
+          child: Text('You have ${favorites.length} favorites.'),
+        ),
+        SizedBox(height: 10),
+        for (var favorite in favorites)
+          ListTile(
+            leading: Icon(Icons.favorite),
+            title: Text(
+              favorite.asUpperCase,
+              style: theme.textTheme.labelLarge,
+            ),
+          ),
+      ],
+    );
+  }
+}
+
 class GeneratorPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
@@ -125,7 +152,7 @@ class GeneratorPage extends StatelessWidget {
           BigCard(pair: pair),
           SizedBox(height: 10),
           Row(
-            mainAxisAlignment: MainAxisAlignment.center, // ← Add this.
+            mainAxisAlignment: MainAxisAlignment.center,
             children: [
               ElevatedButton.icon(
                 onPressed: () {
