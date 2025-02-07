@@ -27,17 +27,25 @@ class MyApp extends StatelessWidget {
 
 class MyAppState extends ChangeNotifier {
   var current = WordPair.random();
+  List<WordPair> history = <WordPair>[];
+  GlobalKey? historyListKey;
+
   void getNext() {
+    history.insert(0, current);
+    var animatedList = historyListKey?.currentState as AnimatedListState?;
+    animatedList?.insertItem(0);
+
     current = WordPair.random();
     notifyListeners();
   }
 
   var favorites = <WordPair>[];
-  void toggleFavorite() {
-    if (favorites.contains(current)) {
-      favorites.remove(current);
+  void toggleFavorite({WordPair? pair}) {
+    final WordPair target = pair ?? current;
+    if (favorites.contains(target)) {
+      favorites.remove(target);
     } else {
-      favorites.add(current);
+      favorites.add(target);
     }
     notifyListeners();
   }
@@ -106,25 +114,48 @@ class _MyHomePageState extends State<MyHomePage> {
 class FavoritePage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
+    var theme = Theme.of(context);
     var appState = context.watch<MyAppState>();
-    var favorites = appState.favorites;
-    final theme = Theme.of(context);
 
-    return ListView(
+    if (appState.favorites.isEmpty) {
+      return Center(
+        child: Text('No favorites yet.'),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
-          padding: const EdgeInsets.all(8.0),
-          child: Text('You have ${favorites.length} favorites.'),
+          padding: const EdgeInsets.all(30),
+          child: Text('You have '
+              '${appState.favorites.length} favorites:'),
         ),
-        SizedBox(height: 10),
-        for (var favorite in favorites)
-          ListTile(
-            leading: Icon(Icons.favorite),
-            title: Text(
-              favorite.asUpperCase,
-              style: theme.textTheme.labelLarge,
+        Expanded(
+          // Make better use of wide windows with a grid.
+          child: GridView(
+            gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
+              maxCrossAxisExtent: 400,
+              childAspectRatio: 400 / 80,
             ),
+            children: [
+              for (var pair in appState.favorites)
+                ListTile(
+                  leading: IconButton(
+                    icon: Icon(Icons.delete_outline, semanticLabel: 'Delete'),
+                    color: theme.colorScheme.primary,
+                    onPressed: () {
+                      appState.toggleFavorite(pair: pair);
+                    },
+                  ),
+                  title: Text(
+                    pair.asLowerCase,
+                    semanticsLabel: pair.asPascalCase,
+                  ),
+                ),
+            ],
           ),
+        ),
       ],
     );
   }
@@ -147,6 +178,7 @@ class GeneratorPage extends StatelessWidget {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
+          HistoryListView(),
           EmojiText(),
           SizedBox(height: 10),
           BigCard(pair: pair),
@@ -170,8 +202,67 @@ class GeneratorPage extends StatelessWidget {
               ),
             ],
           ),
+          Spacer(flex: 2),
         ],
       ),
+    );
+  }
+}
+
+class HistoryListView extends StatefulWidget {
+  const HistoryListView({Key? key}) : super(key: key);
+
+  @override
+  State<HistoryListView> createState() => _HistoryListViewState();
+}
+
+class _HistoryListViewState extends State<HistoryListView> {
+  final _key = GlobalKey();
+
+  static const Gradient _maskingGradient = LinearGradient(
+    // This gradient goes from fully transparent to fully opaque black...
+    colors: [Colors.transparent, Colors.black],
+    // ... from the top (transparent) to half (0.5) of the way to the bottom.
+    stops: [0.0, 0.5],
+    begin: Alignment.topCenter,
+    end: Alignment.bottomCenter,
+  );
+
+  @override
+  Widget build(BuildContext context) {
+    final appState = context.watch<MyAppState>();
+    appState.historyListKey = _key;
+
+    return Expanded(
+      flex: 3,
+      child: ShaderMask(
+          shaderCallback: (bounds) => _maskingGradient.createShader(bounds),
+          blendMode: BlendMode.dstIn,
+          child: AnimatedList(
+              key: _key,
+              reverse: true,
+              padding: EdgeInsets.only(top: 100),
+              initialItemCount: appState.history.length,
+              itemBuilder: (context, index, animation) {
+                final pair = appState.history[index];
+                return SizeTransition(
+                  sizeFactor: animation,
+                  child: Center(
+                    child: TextButton.icon(
+                      onPressed: () {
+                        appState.toggleFavorite(pair: pair);
+                      },
+                      icon: appState.favorites.contains(pair)
+                          ? Icon(Icons.favorite, size: 12)
+                          : SizedBox(),
+                      label: Text(
+                        pair.asLowerCase,
+                        semanticsLabel: pair.asPascalCase,
+                      ),
+                    ),
+                  ),
+                );
+              })),
     );
   }
 }
