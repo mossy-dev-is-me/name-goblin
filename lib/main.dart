@@ -1,6 +1,7 @@
 import 'package:english_words/english_words.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'dart:math';
 
 void main() {
   runApp(MyApp());
@@ -26,22 +27,60 @@ class MyApp extends StatelessWidget {
 }
 
 class MyAppState extends ChangeNotifier {
-  var current = WordPair.random();
-  List<WordPair> history = <WordPair>[];
+  String current = '';
+  List<String> history = <String>[];
   GlobalKey? historyListKey;
+  int raceKey = 0;
+  List<({String name, String iconImage})> races = [
+    (name: "Goblin", iconImage: "assets/goblin.png"),
+    (name: "Orc", iconImage: "assets/orc.png"),
+    (name: "Human", iconImage: "assets/human.png"),
+  ];
+
+  MyAppState() {
+    generateNewName();
+  }
+
+  void generateNewName() {
+    current = generateRaceName(races[raceKey].name);
+    notifyListeners();
+  }
+
+  String generateRaceName(String race) {
+    final random = Random();
+
+    Map<String, List<String>> nameParts = {
+      "Goblin": ["Giz", "Snag", "Blix", "Grub", "Zig"],
+      "Orc": ["Gor", "Brak", "Thok", "Urg", "Krag"],
+      "Human": ["John", "Arthur", "William", "Henry", "Robert"],
+    };
+
+    Map<String, List<String>> suffixes = {
+      "Goblin": ["nob", "bix", "zag", "tix", "muk"],
+      "Orc": ["mok", "thar", "gar", "gul", "drak"],
+      "Human": ["son", "man", "ford", "ley", "ton"],
+    };
+
+    var firstPart =
+        nameParts[race]?[random.nextInt(nameParts[race]!.length)] ?? "Nameless";
+    var secondPart =
+        suffixes[race]?[random.nextInt(suffixes[race]!.length)] ?? "One";
+
+    return "$firstPart$secondPart";
+  }
 
   void getNext() {
     history.insert(0, current);
     var animatedList = historyListKey?.currentState as AnimatedListState?;
     animatedList?.insertItem(0);
 
-    current = WordPair.random();
+    generateNewName();
     notifyListeners();
   }
 
-  var favorites = <WordPair>[];
-  void toggleFavorite({WordPair? pair}) {
-    final WordPair target = pair ?? current;
+  var favorites = <String>[];
+  void toggleFavorite({String? pair}) {
+    final String target = pair ?? current;
     if (favorites.contains(target)) {
       favorites.remove(target);
     } else {
@@ -149,8 +188,7 @@ class FavoritePage extends StatelessWidget {
                     },
                   ),
                   title: Text(
-                    pair.asLowerCase,
-                    semanticsLabel: pair.asPascalCase,
+                    pair.toLowerCase(),
                   ),
                 ),
             ],
@@ -179,7 +217,7 @@ class GeneratorPage extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           HistoryListView(),
-          EmojiText(),
+          RaceSelector(),
           SizedBox(height: 10),
           BigCard(pair: pair),
           SizedBox(height: 10),
@@ -256,8 +294,7 @@ class _HistoryListViewState extends State<HistoryListView> {
                           ? Icon(Icons.favorite, size: 12)
                           : SizedBox(),
                       label: Text(
-                        pair.asLowerCase,
-                        semanticsLabel: pair.asPascalCase,
+                        pair.toLowerCase(),
                       ),
                     ),
                   ),
@@ -267,15 +304,26 @@ class _HistoryListViewState extends State<HistoryListView> {
   }
 }
 
-class EmojiText extends StatelessWidget {
-  const EmojiText({
-    super.key,
-  });
-
+class RaceSelector extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Text('👺', style: theme.textTheme.displayMedium!);
+    final appState = context.watch<MyAppState>();
+    return DropdownButtonHideUnderline(
+        child: DropdownButton<int>(
+      value: appState.raceKey,
+      items: List.generate(appState.races.length, (index) {
+        return DropdownMenuItem<int>(
+          value: index,
+          child: Text(appState.races[index].name),
+        );
+      }),
+      onChanged: (int? newIndex) {
+        if (newIndex != null) {
+          appState.raceKey = newIndex;
+          appState.generateNewName();
+        }
+      },
+    ));
   }
 }
 
@@ -285,7 +333,7 @@ class BigCard extends StatelessWidget {
     required this.pair,
   });
 
-  final WordPair pair;
+  final String pair;
 
   @override
   Widget build(BuildContext context) {
@@ -299,9 +347,8 @@ class BigCard extends StatelessWidget {
       child: Padding(
         padding: const EdgeInsets.all(20.0),
         child: Text(
-          pair.asUpperCase,
+          pair.toUpperCase(),
           style: style,
-          semanticsLabel: "${pair.first} ${pair.second}",
         ),
       ),
     );
