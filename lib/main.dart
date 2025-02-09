@@ -2,6 +2,8 @@ import 'package:english_words/english_words.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'dart:math';
+import 'data.dart';
+import 'name_generator.dart';
 
 void main() {
   runApp(MyApp());
@@ -27,50 +29,41 @@ class MyApp extends StatelessWidget {
 }
 
 class MyAppState extends ChangeNotifier {
-  String current = '';
-  List<String> history = <String>[];
+  List<Name> history = <Name>[];
   GlobalKey? historyListKey;
   int raceKey = 0;
-  List<({String name, String iconImage})> races = [
-    (name: "Goblin", iconImage: "assets/goblin.png"),
-    (name: "Orc", iconImage: "assets/orc.png"),
-    (name: "Human", iconImage: "assets/human.png"),
-  ];
+  String gender = 'Male';
+  Name current;
 
-  MyAppState() {
-    generateNewName();
+  bool _isInitialized = false;
+
+  MyAppState() : current = Name(name: '', gender: '', race: races[0]) {
+    _initialize();
+  }
+
+  Future<void> _initialize() async {
+    await initializeNameGenerator(); // Wait for the name generator to initialize
+    _isInitialized = true;
+    generateNewName(); // Generate the first name after initialization
   }
 
   void generateNewName() {
-    current = generateRaceName(races[raceKey].name);
+    if (!_isInitialized) {
+      print("Name generator is not initialized yet.");
+      return;
+    }
+
+    current = generateRaceName(races[raceKey], gender);
     notifyListeners();
   }
 
-  String generateRaceName(String race) {
-    final random = Random();
-
-    Map<String, List<String>> nameParts = {
-      "Goblin": ["Giz", "Snag", "Blix", "Grub", "Zig"],
-      "Orc": ["Gor", "Brak", "Thok", "Urg", "Krag"],
-      "Human": ["John", "Arthur", "William", "Henry", "Robert"],
-    };
-
-    Map<String, List<String>> suffixes = {
-      "Goblin": ["nob", "bix", "zag", "tix", "muk"],
-      "Orc": ["mok", "thar", "gar", "gul", "drak"],
-      "Human": ["son", "man", "ford", "ley", "ton"],
-    };
-
-    var firstPart =
-        nameParts[race]?[random.nextInt(nameParts[race]!.length)] ?? "Nameless";
-    var secondPart =
-        suffixes[race]?[random.nextInt(suffixes[race]!.length)] ?? "One";
-
-    return "$firstPart$secondPart";
-  }
-
   void getNext() {
-    history.insert(0, current);
+    if (!_isInitialized) {
+      print("Name generator is not initialized yet.");
+      return;
+    }
+
+    history.insert(0, current!);
     var animatedList = historyListKey?.currentState as AnimatedListState?;
     animatedList?.insertItem(0);
 
@@ -78,9 +71,9 @@ class MyAppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  var favorites = <String>[];
-  void toggleFavorite({String? pair}) {
-    final String target = pair ?? current;
+  var favorites = <Name>[];
+  void toggleFavorite({Name? name}) {
+    final Name target = name ?? current!;
     if (favorites.contains(target)) {
       favorites.remove(target);
     } else {
@@ -97,56 +90,114 @@ class MyHomePage extends StatefulWidget {
 
 class _MyHomePageState extends State<MyHomePage> {
   var selectedIndex = 0;
+  late Future<void> _initializationFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    // Start the initialization process
+    _initializationFuture = initializeNameGenerator();
+  }
 
   @override
   Widget build(BuildContext context) {
-    Widget page;
-    switch (selectedIndex) {
-      case 0:
-        page = GeneratorPage();
-        break;
-      case 1:
-        page = FavoritePage();
-        break;
-      default:
-        throw UnimplementedError('no widget for $selectedIndex');
-    }
+    return FutureBuilder(
+      future: _initializationFuture,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          // Show a loading page while waiting for initialization
+          return LoadingPage();
+        } else if (snapshot.hasError) {
+          // Show an error page if initialization fails
+          return ErrorPage(error: snapshot.error.toString());
+        } else {
+          // Show the main content once initialization is complete
+          return Scaffold(
+            body: Row(
+              children: [
+                NavigationRail(
+                  selectedIndex: selectedIndex,
+                  onDestinationSelected: (value) {
+                    setState(() {
+                      selectedIndex = value;
+                    });
+                  },
+                  labelType: NavigationRailLabelType.all,
+                  destinations: [
+                    NavigationRailDestination(
+                      icon: Icon(Icons.home),
+                      label: Text('Home'),
+                    ),
+                    NavigationRailDestination(
+                      icon: Icon(Icons.favorite),
+                      label: Text('Favorites'),
+                    ),
+                  ],
+                ),
+                Expanded(
+                  child: Container(
+                    color: Theme.of(context).colorScheme.primaryContainer,
+                    child: _getPage(selectedIndex),
+                  ),
+                ),
+              ],
+            ),
+          );
+        }
+      },
+    );
+  }
 
-    return LayoutBuilder(builder: (context, constraints) {
-      return Scaffold(
-        body: Row(
+  Widget _getPage(int index) {
+    switch (index) {
+      case 0:
+        return GeneratorPage();
+      case 1:
+        return FavoritePage();
+      default:
+        throw UnimplementedError('no widget for $index');
+    }
+  }
+}
+
+class LoadingPage extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            SafeArea(
-              child: NavigationRail(
-                extended: constraints.maxWidth >= 600,
-                destinations: [
-                  NavigationRailDestination(
-                    icon: Icon(Icons.home),
-                    label: Text('Home'),
-                  ),
-                  NavigationRailDestination(
-                    icon: Icon(Icons.favorite),
-                    label: Text('Favorites'),
-                  ),
-                ],
-                selectedIndex: selectedIndex,
-                onDestinationSelected: (value) {
-                  setState(() {
-                    selectedIndex = value;
-                  });
-                },
-              ),
-            ),
-            Expanded(
-              child: Container(
-                color: Theme.of(context).colorScheme.primaryContainer,
-                child: page,
-              ),
-            ),
+            CircularProgressIndicator(), // Loading spinner
+            SizedBox(height: 20),
+            Text('Initializing name generator...'),
           ],
         ),
-      );
-    });
+      ),
+    );
+  }
+}
+
+class ErrorPage extends StatelessWidget {
+  final String error;
+
+  ErrorPage({required this.error});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.error, color: Colors.red, size: 50),
+            SizedBox(height: 20),
+            Text('Initialization failed:'),
+            Text(error, style: TextStyle(color: Colors.red)),
+          ],
+        ),
+      ),
+    );
   }
 }
 
@@ -178,17 +229,17 @@ class FavoritePage extends StatelessWidget {
               childAspectRatio: 400 / 80,
             ),
             children: [
-              for (var pair in appState.favorites)
+              for (var name in appState.favorites)
                 ListTile(
                   leading: IconButton(
                     icon: Icon(Icons.delete_outline, semanticLabel: 'Delete'),
                     color: theme.colorScheme.primary,
                     onPressed: () {
-                      appState.toggleFavorite(pair: pair);
+                      appState.toggleFavorite(name: name);
                     },
                   ),
                   title: Text(
-                    pair.toLowerCase(),
+                    name.name.toLowerCase(),
                   ),
                 ),
             ],
@@ -203,10 +254,10 @@ class GeneratorPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     var appState = context.watch<MyAppState>();
-    var pair = appState.current;
+    var currentName = appState.current;
 
     IconData icon;
-    if (appState.favorites.contains(pair)) {
+    if (appState.favorites.contains(currentName)) {
       icon = Icons.favorite;
     } else {
       icon = Icons.favorite_border;
@@ -219,7 +270,7 @@ class GeneratorPage extends StatelessWidget {
           HistoryListView(),
           RaceSelector(),
           SizedBox(height: 10),
-          BigCard(pair: pair),
+          BigCard(raceName: currentName),
           SizedBox(height: 10),
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -282,19 +333,19 @@ class _HistoryListViewState extends State<HistoryListView> {
               padding: EdgeInsets.only(top: 100),
               initialItemCount: appState.history.length,
               itemBuilder: (context, index, animation) {
-                final pair = appState.history[index];
+                final raceName = appState.history[index];
                 return SizeTransition(
                   sizeFactor: animation,
                   child: Center(
                     child: TextButton.icon(
                       onPressed: () {
-                        appState.toggleFavorite(pair: pair);
+                        appState.toggleFavorite(name: raceName);
                       },
-                      icon: appState.favorites.contains(pair)
+                      icon: appState.favorites.contains(raceName)
                           ? Icon(Icons.favorite, size: 12)
                           : SizedBox(),
                       label: Text(
-                        pair.toLowerCase(),
+                        raceName.name.toLowerCase(),
                       ),
                     ),
                   ),
@@ -311,10 +362,20 @@ class RaceSelector extends StatelessWidget {
     return DropdownButtonHideUnderline(
         child: DropdownButton<int>(
       value: appState.raceKey,
-      items: List.generate(appState.races.length, (index) {
+      items: List.generate(races.length, (index) {
         return DropdownMenuItem<int>(
           value: index,
-          child: Text(appState.races[index].name),
+          child: Row(
+            children: [
+              Image.asset(
+                races[index].imagePath, // Path to the image
+                width: 24, // Set the width of the image
+                height: 24, // Set the height of the image
+              ),
+              SizedBox(width: 8),
+              Text(races[index].name),
+            ],
+          ),
         );
       }),
       onChanged: (int? newIndex) {
@@ -330,10 +391,10 @@ class RaceSelector extends StatelessWidget {
 class BigCard extends StatelessWidget {
   const BigCard({
     super.key,
-    required this.pair,
+    required this.raceName,
   });
 
-  final String pair;
+  final Name raceName;
 
   @override
   Widget build(BuildContext context) {
@@ -347,7 +408,7 @@ class BigCard extends StatelessWidget {
       child: Padding(
         padding: const EdgeInsets.all(20.0),
         child: Text(
-          pair.toUpperCase(),
+          raceName.name.toUpperCase(),
           style: style,
         ),
       ),
