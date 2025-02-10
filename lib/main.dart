@@ -35,35 +35,21 @@ class MyAppState extends ChangeNotifier {
   String gender = 'Male';
   Name current;
 
-  bool _isInitialized = false;
-
   MyAppState() : current = Name(name: '', gender: '', race: races[0]) {
     _initialize();
   }
 
   Future<void> _initialize() async {
-    await initializeNameGenerator(); // Wait for the name generator to initialize
-    _isInitialized = true;
     generateNewName(); // Generate the first name after initialization
   }
 
   void generateNewName() {
-    if (!_isInitialized) {
-      print("Name generator is not initialized yet.");
-      return;
-    }
-
     current = generateRaceName(races[raceKey], gender);
     notifyListeners();
   }
 
   void getNext() {
-    if (!_isInitialized) {
-      print("Name generator is not initialized yet.");
-      return;
-    }
-
-    history.insert(0, current!);
+    history.insert(0, current);
     var animatedList = historyListKey?.currentState as AnimatedListState?;
     animatedList?.insertItem(0);
 
@@ -73,12 +59,17 @@ class MyAppState extends ChangeNotifier {
 
   var favorites = <Name>[];
   void toggleFavorite({Name? name}) {
-    final Name target = name ?? current!;
+    final Name target = name ?? current;
     if (favorites.contains(target)) {
       favorites.remove(target);
     } else {
       favorites.add(target);
     }
+    notifyListeners();
+  }
+
+  void toggleGender(String gender) {
+    this.gender = gender;
     notifyListeners();
   }
 }
@@ -90,61 +81,45 @@ class MyHomePage extends StatefulWidget {
 
 class _MyHomePageState extends State<MyHomePage> {
   var selectedIndex = 0;
-  late Future<void> _initializationFuture;
 
   @override
   void initState() {
     super.initState();
-    // Start the initialization process
-    _initializationFuture = initializeNameGenerator();
   }
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder(
-      future: _initializationFuture,
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          // Show a loading page while waiting for initialization
-          return LoadingPage();
-        } else if (snapshot.hasError) {
-          // Show an error page if initialization fails
-          return ErrorPage(error: snapshot.error.toString());
-        } else {
-          // Show the main content once initialization is complete
-          return Scaffold(
-            body: Row(
-              children: [
-                NavigationRail(
-                  selectedIndex: selectedIndex,
-                  onDestinationSelected: (value) {
-                    setState(() {
-                      selectedIndex = value;
-                    });
-                  },
-                  labelType: NavigationRailLabelType.all,
-                  destinations: [
-                    NavigationRailDestination(
-                      icon: Icon(Icons.home),
-                      label: Text('Home'),
-                    ),
-                    NavigationRailDestination(
-                      icon: Icon(Icons.favorite),
-                      label: Text('Favorites'),
-                    ),
-                  ],
-                ),
-                Expanded(
-                  child: Container(
-                    color: Theme.of(context).colorScheme.primaryContainer,
-                    child: _getPage(selectedIndex),
-                  ),
-                ),
-              ],
+    // Show the main content once initialization is complete
+    return Scaffold(
+      body: Row(
+        children: [
+          NavigationRail(
+            selectedIndex: selectedIndex,
+            onDestinationSelected: (value) {
+              setState(() {
+                selectedIndex = value;
+              });
+            },
+            labelType: NavigationRailLabelType.all,
+            destinations: [
+              NavigationRailDestination(
+                icon: Icon(Icons.home),
+                label: Text('Home'),
+              ),
+              NavigationRailDestination(
+                icon: Icon(Icons.favorite),
+                label: Text('Favorites'),
+              ),
+            ],
+          ),
+          Expanded(
+            child: Container(
+              color: Theme.of(context).colorScheme.primaryContainer,
+              child: _getPage(selectedIndex),
             ),
-          );
-        }
-      },
+          ),
+        ],
+      ),
     );
   }
 
@@ -157,47 +132,6 @@ class _MyHomePageState extends State<MyHomePage> {
       default:
         throw UnimplementedError('no widget for $index');
     }
-  }
-}
-
-class LoadingPage extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            CircularProgressIndicator(), // Loading spinner
-            SizedBox(height: 20),
-            Text('Initializing name generator...'),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class ErrorPage extends StatelessWidget {
-  final String error;
-
-  ErrorPage({required this.error});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.error, color: Colors.red, size: 50),
-            SizedBox(height: 20),
-            Text('Initialization failed:'),
-            Text(error, style: TextStyle(color: Colors.red)),
-          ],
-        ),
-      ),
-    );
   }
 }
 
@@ -269,6 +203,28 @@ class GeneratorPage extends StatelessWidget {
         children: [
           HistoryListView(),
           RaceSelector(),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              IconButton(
+                icon: Icon(Icons.male,
+                    color:
+                        appState.gender == 'Male' ? Colors.blue : Colors.grey),
+                onPressed: () {
+                  appState.toggleGender('Male');
+                },
+              ),
+              IconButton(
+                icon: Icon(Icons.female,
+                    color: appState.gender == 'Female'
+                        ? Colors.pink
+                        : Colors.grey),
+                onPressed: () {
+                  appState.toggleGender('Female');
+                },
+              ),
+            ],
+          ),
           SizedBox(height: 10),
           BigCard(raceName: currentName),
           SizedBox(height: 10),
@@ -337,16 +293,27 @@ class _HistoryListViewState extends State<HistoryListView> {
                 return SizeTransition(
                   sizeFactor: animation,
                   child: Center(
-                    child: TextButton.icon(
-                      onPressed: () {
-                        appState.toggleFavorite(name: raceName);
-                      },
-                      icon: appState.favorites.contains(raceName)
-                          ? Icon(Icons.favorite, size: 12)
-                          : SizedBox(),
-                      label: Text(
-                        raceName.name.toLowerCase(),
-                      ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Image.asset(
+                          raceName.race.imagePath, // Path to the image
+                          width: 24, // Set the width of the image
+                          height: 24, // Set the height of the image
+                        ),
+                        SizedBox(width: 8),
+                        TextButton.icon(
+                          onPressed: () {
+                            appState.toggleFavorite(name: raceName);
+                          },
+                          icon: appState.favorites.contains(raceName)
+                              ? Icon(Icons.favorite, size: 12)
+                              : SizedBox(),
+                          label: Text(
+                            raceName.name.toLowerCase(),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 );

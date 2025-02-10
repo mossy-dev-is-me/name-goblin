@@ -64,12 +64,6 @@ flutter:
     - "assets/images/human.png"
     - "assets/images/orc.png"
     - "assets/images/goblin.png"
-    - "assets/names/goblin_male.txt"
-    - "assets/names/goblin_female.txt"
-    - "assets/names/human_male.txt"
-    - "assets/names/human_female.txt"
-    - "assets/names/orc_male.txt"
-    - "assets/names/orc_female.txt"
 
 
   # To add assets to your application, add an assets section, like this:
